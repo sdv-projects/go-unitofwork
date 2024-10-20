@@ -2,10 +2,7 @@ module github.com/sdv-projects/go-unitofwork
 
 go 1.22.5
 
-require (
-	github.com/google/uuid v1.6.0
-	github.com/uptrace/bun v1.2.3
-)
+require github.com/uptrace/bun v1.2.3
 
 require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
