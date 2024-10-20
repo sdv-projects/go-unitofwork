@@ -1,0 +1,184 @@
+@startuml NMS Common Abstraction
+
+package uow {
+    package bun {
+        class Transaction {
+            - db: *bun.DB
+            - tx: bun.Tx
+            ..
+            + GetTx() bun.Tx
+            + Begin(ctx context.Context) error
+            --
+            {static} NewTransaction(db *bun.DB) *Transaction
+        }
+
+        class UnitOfWork {
+            - tr: *Transaction
+            ..
+            + Commit(ctx context.Context) error
+        }
+
+        UnitOfWork ..|> uow.UnitOfWork
+        UnitOfWork *-- uow.UoWBase
+        UnitOfWork -r-> Transaction: Begin,\n Commit,\n Rollback
+
+        class CreateRepositoryFactoryFn << (F,coral) >> <<func>> {
+            func(t *Transation) uow.RepositoryFactory
+        }
+
+        ' CreateRepositoryFactoryFn --> uow.RepositoryFactory: return
+
+        class UnitOfWorkFactory {
+            - db: *bun.DB
+            --
+            {static} NewUnitOfWorkFactory(db *bun.DB) *UnitOfWorkFactory
+        }
+
+        UnitOfWorkFactory ..|> uow.UnitOfWorkFactory
+        UnitOfWorkFactory --> Transaction: Create new
+        UnitOfWorkFactory --> UnitOfWork: Create new
+        UnitOfWorkFactory -l-> CreateRepositoryFactoryFn: Call
+
+        class RepositoryBase {
+            - tr: *Transaction
+            ..
+            + GetTx() bun.Tx
+            ..
+            {static} NewRepositoryBase(tr *Transaction) RepositoryBase
+        }
+
+        RepositoryBase *-- uow.RepositoryBase
+        RepositoryBase -r-> Transaction: GetTx
+    }
+
+    interface UnitOfWorkFactory {
+        + New(ctx context.Context) (UnitOfWork, error)
+    }
+
+    interface UnitOfWork {
+        + GetRepository(entityType reflect.Type) (interface{}, error)
+        + Commit(ctx context.Context) error
+    }
+
+    interface Repository {
+        + Add(ctx context.Context, e any) error
+        + Update(ctx context.Context, e any) error
+        + Delete(ctx context.Context, e any) error
+    }
+
+    interface UoWRepository {
+        + Flush(ctx context.Context) error
+    }
+
+    interface RepositoryFactory {
+        New(entityType reflect.Type) (Repository, error)
+    }
+
+    class UoWBase {
+        The struct implements UnitOfWork interface
+        and commmon Flush logic.
+
+        Flush function call UoWRepository.Flush for
+        each repository.
+        ..
+        - repos   map[reflect.Type]Repository
+        - factory RepositoryFactory
+        ..
+        - Flush(ctx context.Context) error
+        + GetRepository(entityType reflect.Type) (interface{}, error) 
+    }
+
+    ' UoWBase ..|> UnitOfWork
+    UoWBase --> UoWRepository: Flush
+
+    class RepositoryBase {
+        This is the base structure of the repository.
+        It's must be embeded into a specific Repository implementation.
+
+        removed, added, updated are arrays of entities
+        that are marked as removed, added, updated.
+        ..
+        - deleted: []any
+        - added: []any
+        - updated: []any
+        ..
+        + GetAdded() []any
+        + GetDeleted() []any
+        + GetUpdated() []any
+        ..
+        + Add(ctx context.Context, e any) error
+        + Update(ctx context.Context, e any) error
+        + Delete(ctx context.Context, e any) error
+        ..
+        {static} NewRepositoryBase() RepositoryBase
+    }
+
+    RepositoryBase ..|> Repository
+}
+
+package example {
+    package my_app {
+        package internal {
+            package adapter {
+                package repository {
+                    class UsersRepository {
+                        - add(ctx contect.Context, user *domain.User) error
+                        - delete(ctx contect.Context, user *domain.User) error
+                        - update(ctx contect.Context, user *domain.User) error
+                        ..
+                        + Flush(ctx contect.Context) error
+                        ..
+                        {static} NewUsersRepository(t *uow_bun.Transaction) *UsersRepository
+                    }
+
+                    UsersRepository ..|> uow.UoWRepository
+                    UsersRepository *-- uow.bun.RepositoryBase
+
+                    class RepositoryFactory {
+                        
+                    }
+
+                    RepositoryFactory ..|> uow.RepositoryFactory
+                    RepositoryFactory --> UsersRepository: NewUsersRepository
+
+                    class CreateRepositoryFactory << (F,coral) >> <<func>> {
+                        func (..dependencies...) uow.bun.CreateRepositoryFactoryFn
+                    }
+
+                    CreateRepositoryFactory --> uow.bun.CreateRepositoryFactoryFn: return 
+                    CreateRepositoryFactory --> RepositoryFactory: Create instance
+                }
+            }
+
+            package domain {
+                class User {
+
+                }
+            }
+
+            package usecase {
+                package command {
+                    package CreateUserCommand <<Rectangle>> {
+                        class CreateUserCommand {
+                            + UserName: string
+                        }
+
+                        class CreateUserCommandHandler {
+                            user := domain.NewUser(cmd.UserName)
+                            usersRepos, err := unitOfwork.GetRepository(reflect.TypeOf(User))
+                            if err != nil 
+                                return err
+
+                            usersRepos.Add(user)
+                            unitOfwork.Commit(ctx)
+                            ..
+                            - unitOfwork: uow.UnitOfWork
+                        } 
+                    }
+                }
+            }
+        }
+    }
+}
+
+@enduml
