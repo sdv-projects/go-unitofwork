@@ -60,3 +60,12 @@ func (r *RepositoryBase) GetUpdated() []any {
 
 	return r.updated
 }
+
+func NewRepositoryBase() RepositoryBase {
+	return RepositoryBase{
+		added:   make([]any, 0),
+		deleted: make([]any, 0),
+		updated: make([]any, 0),
+		mu:      sync.Mutex{},
+	}
+}
