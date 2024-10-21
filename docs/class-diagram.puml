@@ -1,54 +1,56 @@
 @startuml NMS Common Abstraction
 
 package uow {
-    package bun {
-        class Transaction {
-            - db: *bun.DB
-            - tx: bun.Tx
-            ..
-            + GetTx() bun.Tx
-            + Begin(ctx context.Context) error
-            --
-            {static} NewTransaction(db *bun.DB) *Transaction
+    package persistence {
+        package bun {
+            class Transaction {
+                - db: *bun.DB
+                - tx: bun.Tx
+                ..
+                + GetTx() bun.Tx
+                + Begin(ctx context.Context) error
+                --
+                {static} NewTransaction(db *bun.DB) *Transaction
+            }
+
+            class UnitOfWork {
+                - tr: *Transaction
+                ..
+                + Commit(ctx context.Context) error
+            }
+
+            UnitOfWork ..|> uow.UnitOfWork
+            UnitOfWork *-- uow.UoWBase
+            UnitOfWork -r-> Transaction: Begin,\n Commit,\n Rollback
+
+            class CreateRepositoryFactoryFn << (F,coral) >> <<func>> {
+                func(t *Transation) uow.RepositoryFactory
+            }
+
+            ' CreateRepositoryFactoryFn --> uow.RepositoryFactory: return
+
+            class UnitOfWorkFactory {
+                - db: *bun.DB
+                --
+                {static} NewUnitOfWorkFactory(db *bun.DB) *UnitOfWorkFactory
+            }
+
+            UnitOfWorkFactory ..|> uow.UnitOfWorkFactory
+            UnitOfWorkFactory --> Transaction: Create new
+            UnitOfWorkFactory --> UnitOfWork: Create new
+            UnitOfWorkFactory -l-> CreateRepositoryFactoryFn: Call
+
+            class RepositoryBase {
+                - tr: *Transaction
+                ..
+                + GetTx() bun.Tx
+                ..
+                {static} NewRepositoryBase(tr *Transaction) RepositoryBase
+            }
+
+            RepositoryBase *-- uow.RepositoryBase
+            RepositoryBase -r-> Transaction: GetTx
         }
-
-        class UnitOfWork {
-            - tr: *Transaction
-            ..
-            + Commit(ctx context.Context) error
-        }
-
-        UnitOfWork ..|> uow.UnitOfWork
-        UnitOfWork *-- uow.UoWBase
-        UnitOfWork -r-> Transaction: Begin,\n Commit,\n Rollback
-
-        class CreateRepositoryFactoryFn << (F,coral) >> <<func>> {
-            func(t *Transation) uow.RepositoryFactory
-        }
-
-        ' CreateRepositoryFactoryFn --> uow.RepositoryFactory: return
-
-        class UnitOfWorkFactory {
-            - db: *bun.DB
-            --
-            {static} NewUnitOfWorkFactory(db *bun.DB) *UnitOfWorkFactory
-        }
-
-        UnitOfWorkFactory ..|> uow.UnitOfWorkFactory
-        UnitOfWorkFactory --> Transaction: Create new
-        UnitOfWorkFactory --> UnitOfWork: Create new
-        UnitOfWorkFactory -l-> CreateRepositoryFactoryFn: Call
-
-        class RepositoryBase {
-            - tr: *Transaction
-            ..
-            + GetTx() bun.Tx
-            ..
-            {static} NewRepositoryBase(tr *Transaction) RepositoryBase
-        }
-
-        RepositoryBase *-- uow.RepositoryBase
-        RepositoryBase -r-> Transaction: GetTx
     }
 
     interface UnitOfWorkFactory {
@@ -132,7 +134,7 @@ package example {
                     }
 
                     UsersRepository ..|> uow.UoWRepository
-                    UsersRepository *-- uow.bun.RepositoryBase
+                    UsersRepository *-- uow.persistence.bun.RepositoryBase
 
                     class RepositoryFactory {
                         
@@ -142,10 +144,10 @@ package example {
                     RepositoryFactory --> UsersRepository: NewUsersRepository
 
                     class CreateRepositoryFactory << (F,coral) >> <<func>> {
-                        func (..dependencies...) uow.bun.CreateRepositoryFactoryFn
+                        func (..dependencies...) uow.persistence.bun.CreateRepositoryFactoryFn
                     }
 
-                    CreateRepositoryFactory --> uow.bun.CreateRepositoryFactoryFn: return 
+                    CreateRepositoryFactory --> uow.persistence.bun.CreateRepositoryFactoryFn: return 
                     CreateRepositoryFactory --> RepositoryFactory: Create instance
                 }
             }
